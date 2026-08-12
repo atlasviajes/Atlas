@@ -844,3 +844,214 @@ button {
     width: 100%;
   }
 }
+.flight-message {
+  max-width: 1180px;
+  margin: 18px auto;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #eef6ff;
+  color: #0f3d91;
+}
+
+.flight-results {
+  max-width: 1180px;
+  margin: 0 auto 40px;
+}
+
+.flight-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.flight-card {
+  background: white;
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.flight-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.flight-route {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: #eaf2ff;
+  color: #0f54c7;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.flight-card h3 {
+  margin: 9px 0 0;
+  color: #0f172a;
+}
+
+.flight-price {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+}
+
+.flight-price strong {
+  font-size: 28px;
+  color: #0f172a;
+}
+
+.flight-price span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.flight-info {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.flight-info div {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.flight-info span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.flight-info strong {
+  font-size: 13px;
+  color: #1f2937;
+}
+
+.flight-card-bottom {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.flight-card-bottom span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.flight-card-bottom a {
+  text-decoration: none;
+  padding: 11px 16px;
+  border-radius: 10px;
+  background: #1463df;
+  color: white;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.flight-card-bottom a:hover {
+  background: #0f54c7;
+}
+
+@media (max-width: 700px) {
+  .flight-results {
+    padding: 0 12px;
+  }
+
+  .flight-card-top {
+    flex-direction: column;
+  }
+
+  .flight-price {
+    text-align: left;
+  }
+
+  .flight-info {
+    grid-template-columns: 1fr;
+  }
+
+  .flight-card-bottom {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .flight-card-bottom a {
+    text-align: center;
+  }
+}
+.hero-field input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #dbe3ef;
+  outline: none;
+  background: white;
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.hero-field input:focus {
+  border-color: #1463df;
+  box-shadow: 0 0 0 3px rgba(20, 99, 223, 0.12);
+}
+.autocomplete-field {
+  position: relative;
+}
+
+.autocomplete-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  max-height: 260px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.18);
+}
+
+.autocomplete-list button {
+  width: 100%;
+  padding: 11px 12px;
+  border: none;
+  border-bottom: 1px solid #eef2f7;
+  background: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.autocomplete-list button:last-child {
+  border-bottom: none;
+}
+
+.autocomplete-list button:hover {
+  background: #eef6ff;
+}
+
+.autocomplete-list button strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.autocomplete-list button span {
+  color: #1463df;
+  font-size: 12px;
+  font-weight: 800;
+}

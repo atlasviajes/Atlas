@@ -1,8 +1,9 @@
-function Sidebar() {
+function Sidebar({ pantalla, setPantalla }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
         <span>✈️</span>
+
         <div>
           <strong>ATLAS</strong>
           <small>Viaja mejor</small>
@@ -10,11 +11,40 @@ function Sidebar() {
       </div>
 
       <nav className="sidebar-menu">
-        <button className="activo">🏠 Inicio</button>
-        <button>🔎 Explorar</button>
-        <button>🔥 Ofertas</button>
-        <button>🔔 Alertas</button>
-        <button>👤 Mi Atlas</button>
+        <button
+          className={pantalla === "inicio" ? "activo" : ""}
+          onClick={() => setPantalla("inicio")}
+        >
+          🏠 Inicio
+        </button>
+
+        <button
+          className={pantalla === "explorar" ? "activo" : ""}
+          onClick={() => setPantalla("explorar")}
+        >
+          🔎 Explorar
+        </button>
+
+        <button
+          className={pantalla === "ofertas" ? "activo" : ""}
+          onClick={() => setPantalla("ofertas")}
+        >
+          🔥 Ofertas
+        </button>
+
+        <button
+          className={pantalla === "alertas" ? "activo" : ""}
+          onClick={() => setPantalla("alertas")}
+        >
+          🔔 Alertas
+        </button>
+
+        <button
+          className={pantalla === "mi-atlas" ? "activo" : ""}
+          onClick={() => setPantalla("mi-atlas")}
+        >
+          👤 Mi Atlas
+        </button>
       </nav>
 
       <div className="sidebar-plus">
