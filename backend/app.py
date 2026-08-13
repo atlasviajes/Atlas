@@ -175,10 +175,12 @@ async def buscar_lugares(texto: str):
 
     url = "https://autocomplete.travelpayouts.com/places2"
 
-    params = {
-        "term": texto,
-        "locale": "es",
-    }
+    params = [
+        ("term", texto),
+        ("locale", "es"),
+        ("types[]", "city"),
+        ("types[]", "airport"),
+    ]
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -201,24 +203,69 @@ async def buscar_lugares(texto: str):
 
     datos = respuesta.json()
 
+    texto_busqueda = texto.casefold()
     resultados = []
 
-    for lugar in datos[:8]:
+    for lugar in datos:
         codigo = lugar.get("code")
         nombre = lugar.get("name")
-        tipo = lugar.get("type_name") or lugar.get("type")
+        tipo = lugar.get("type")
+        pais = lugar.get("country_name")
+        pais_codigo = lugar.get("country_code")
+        ciudad_codigo = lugar.get("city_code")
+        ciudad_nombre = lugar.get("city_name")
+        peso = lugar.get("weight", 0)
 
-        if codigo and nombre:
-            resultados.append(
-                {
-                    "codigo": codigo,
-                    "nombre": nombre,
-                    "tipo": tipo,
-                }
-            )
+        if not codigo or not nombre:
+            continue
+
+        if tipo not in ("city", "airport"):
+            continue
+
+        # Solo códigos IATA válidos de 3 letras
+        if len(codigo) != 3 or not codigo.isalpha():
+            continue
+
+        nombre_busqueda = nombre.casefold()
+
+        # Prioridad para coincidencia exacta o que comienza por el texto
+        if nombre_busqueda == texto_busqueda:
+            prioridad = 0
+        elif nombre_busqueda.startswith(texto_busqueda):
+            prioridad = 1
+        elif texto_busqueda in nombre_busqueda:
+            prioridad = 2
+        else:
+            prioridad = 3
+
+        resultados.append(
+            {
+                "codigo": codigo.upper(),
+                "nombre": nombre,
+                "tipo": tipo,
+                "pais": pais,
+                "pais_codigo": pais_codigo,
+                "ciudad_codigo": ciudad_codigo,
+                "ciudad_nombre": ciudad_nombre,
+                "_prioridad": prioridad,
+                "_peso": peso,
+            }
+        )
+
+    resultados.sort(
+        key=lambda lugar: (
+            lugar["_prioridad"],
+            -lugar["_peso"],
+        )
+    )
+
+    resultados = resultados[:8]
+
+    for lugar in resultados:
+        lugar.pop("_prioridad", None)
+        lugar.pop("_peso", None)
 
     return resultados
-
 
 # =========================================================
 # ENLACES AFILIADOS

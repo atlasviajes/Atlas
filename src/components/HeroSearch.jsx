@@ -212,7 +212,7 @@ function HeroSearch() {
                       onMouseDown={() => seleccionarOrigen(lugar)}
                     >
                       <strong>{lugar.nombre}</strong>
-                      <span>{lugar.codigo}</span>
+                      <span translate="no">{lugar.codigo}</span>
                     </button>
                   ))}
                 </div>
@@ -239,7 +239,7 @@ function HeroSearch() {
                       onMouseDown={() => seleccionarDestino(lugar)}
                     >
                       <strong>{lugar.nombre}</strong>
-                      <span>{lugar.codigo}</span>
+                      <span translate="no">{lugar.codigo}</span>
                     </button>
                   ))}
                 </div>
@@ -320,7 +320,7 @@ function HeroSearch() {
               >
                 <div className="flight-card-top">
                   <div>
-                    <span className="flight-route">
+                    <span className="flight-route" translate="no">
                       {vuelo.origin_airport} → {vuelo.destination_airport}
                     </span>
 
