@@ -30,7 +30,12 @@ function HeroSearch() {
 
   const hoy = new Date().toISOString().split("T")[0];
 
-  const totalViajeros = adultos + ninos + bebes;
+  // Para el vuelo no contamos bebés como tarifa completa
+  // porque Travelpayouts no nos devuelve una tarifa
+  // diferenciada y no queremos inventarla.
+  const pasajerosTarificados = adultos + ninos;
+
+  const totalPersonas = adultos + ninos + bebes;
 
   const textoViajeros = () => {
     const partes = [];
@@ -206,19 +211,19 @@ function HeroSearch() {
     );
   };
 
-  const formatearFecha = (fechaISO) => {
-    if (!fechaISO) {
-      return "-";
-    }
+const formatearFecha = (fechaISO) => {
+  if (!fechaISO) {
+    return "-";
+  }
 
-    return new Intl.DateTimeFormat("es-ES", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(fechaISO));
-  };
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(fechaISO));
+};
 
   const formatearDuracion = (minutos) => {
     if (!minutos) {
@@ -247,15 +252,26 @@ function HeroSearch() {
     return "#";
   };
 
+  const calcularTotalVuelo = (vuelo) => {
+    const precio =
+      Number(vuelo.price) || 0;
+
+    return (
+      precio * pasajerosTarificados
+    );
+  };
+
   const calcularAtlasScore = (vuelo) => {
     let score = 0;
 
-    const precio = Number(vuelo.price) || 0;
     const totalEstimado =
-      precio * totalViajeros;
+      calcularTotalVuelo(vuelo);
 
     // PRECIO: máximo 40 puntos
-    if (presupuesto && Number(presupuesto) > 0) {
+    if (
+      presupuesto &&
+      Number(presupuesto) > 0
+    ) {
       const porcentaje =
         totalEstimado /
         Number(presupuesto);
@@ -299,7 +315,10 @@ function HeroSearch() {
     const duracion =
       Number(vuelo.duration) || 0;
 
-    if (duracion > 0 && duracion <= 240) {
+    if (
+      duracion > 0 &&
+      duracion <= 240
+    ) {
       score += 20;
     } else if (duracion <= 480) {
       score += 16;
@@ -328,17 +347,24 @@ function HeroSearch() {
         );
 
       const diferenciaMedia =
-        (diferenciaIda +
-          diferenciaVuelta) /
-        2;
+        (
+          diferenciaIda +
+          diferenciaVuelta
+        ) / 2;
 
       if (diferenciaMedia <= 2) {
         score += 15;
-      } else if (diferenciaMedia <= 7) {
+      } else if (
+        diferenciaMedia <= 7
+      ) {
         score += 12;
-      } else if (diferenciaMedia <= 15) {
+      } else if (
+        diferenciaMedia <= 15
+      ) {
         score += 8;
-      } else if (diferenciaMedia <= 30) {
+      } else if (
+        diferenciaMedia <= 30
+      ) {
         score += 4;
       }
     } else {
@@ -398,12 +424,8 @@ function HeroSearch() {
     }
 
     return lista.filter((vuelo) => {
-      const precioPorPersona =
-        Number(vuelo.price) || 0;
-
       const totalOrientativo =
-        precioPorPersona *
-        totalViajeros;
+        calcularTotalVuelo(vuelo);
 
       return (
         totalOrientativo <=
@@ -500,7 +522,7 @@ function HeroSearch() {
             lista.length === 1
               ? "oportunidad"
               : "oportunidades"
-          } y las ha ordenado por Atlas Score.`
+          } cercanas a tus fechas.`
         );
       } else {
         setMensaje(
@@ -561,11 +583,11 @@ function HeroSearch() {
 
       if (
         presupuesto &&
-        totalViajeros > 0
+        pasajerosTarificados > 0
       ) {
         const presupuestoPorPersona =
           Number(presupuesto) /
-          totalViajeros;
+          pasajerosTarificados;
 
         url.searchParams.set(
           "presupuesto",
@@ -673,6 +695,40 @@ function HeroSearch() {
     }
   };
 
+  const prepararAlojamiento = (
+    vuelo
+  ) => {
+    const destino =
+      vuelo.destination_name ||
+      destinoTexto ||
+      vuelo.destination_airport;
+
+    const entrada =
+      vuelo.departure_at
+        ? vuelo.departure_at.slice(
+            0,
+            10
+          )
+        : fechaIda;
+
+    const salida =
+      vuelo.return_at
+        ? vuelo.return_at.slice(
+            0,
+            10
+          )
+        : fechaVuelta;
+
+    setMensaje(
+      `🏨 Atlas tiene preparada la búsqueda de alojamiento en ${destino} del ${entrada} al ${salida}. La fuente hotelera sigue en modo de pruebas, por lo que todavía no mostramos esos precios como reales.`
+    );
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
   return (
     <>
       <section className="hero">
@@ -729,9 +785,7 @@ function HeroSearch() {
                           }
                         </strong>
 
-                        <span
-                          translate="no"
-                        >
+                        <span translate="no">
                           {
                             lugar.codigo
                           }
@@ -781,9 +835,7 @@ function HeroSearch() {
                           }
                         </strong>
 
-                        <span
-                          translate="no"
-                        >
+                        <span translate="no">
                           {
                             lugar.codigo
                           }
@@ -812,9 +864,7 @@ function HeroSearch() {
                     e.target.value >
                       fechaVuelta
                   ) {
-                    setFechaVuelta(
-                      ""
-                    );
+                    setFechaVuelta("");
                   }
                 }}
               />
@@ -850,7 +900,17 @@ function HeroSearch() {
                   )
                 }
               >
-                {[1,2,3,4,5,6,7,8,9].map(
+                {[
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                ].map(
                   (numero) => (
                     <option
                       key={numero}
@@ -881,7 +941,15 @@ function HeroSearch() {
                   )
                 }
               >
-                {[0,1,2,3,4,5,6].map(
+                {[
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                ].map(
                   (numero) => (
                     <option
                       key={numero}
@@ -912,7 +980,13 @@ function HeroSearch() {
                   )
                 }
               >
-                {[0,1,2,3,4].map(
+                {[
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                ].map(
                   (numero) => (
                     <option
                       key={numero}
@@ -986,6 +1060,7 @@ function HeroSearch() {
             </button>
 
           </div>
+
         </div>
       </section>
 
@@ -1006,7 +1081,7 @@ function HeroSearch() {
               <h2>
                 {modoResultados ===
                 "fechas"
-                  ? "🔎 Oportunidades cercanas a tus fechas"
+                  ? "🔎 Viajes para tu búsqueda"
                   : "⚡ Mejores oportunidades Atlas"}
               </h2>
 
@@ -1037,15 +1112,22 @@ function HeroSearch() {
               )}
 
               <small>
-                Atlas Score combina
-                precio, escalas,
-                duración y cercanía a
-                tus fechas. Los precios
-                proceden de búsquedas
-                recientes y deben
-                confirmarse con el
-                proveedor.
+                Atlas Score combina precio,
+                escalas, duración y cercanía
+                a tus fechas. Los vuelos son
+                precios encontrados
+                recientemente y deben
+                confirmarse con el proveedor.
               </small>
+
+              {bebes > 0 && (
+                <small>
+                  👶 La tarifa de los bebés
+                  no está incluida en el total
+                  orientativo del vuelo y debe
+                  confirmarse con el proveedor.
+                </small>
+              )}
 
             </div>
           </div>
@@ -1059,6 +1141,11 @@ function HeroSearch() {
               ) => {
                 const atlasScore =
                   calcularAtlasScore(
+                    vuelo
+                  );
+
+                const totalVuelo =
+                  calcularTotalVuelo(
                     vuelo
                   );
 
@@ -1133,6 +1220,7 @@ function HeroSearch() {
                     </div>
 
                     <div className="atlas-score">
+
                       <strong>
                         ⭐ Atlas Score{" "}
                         {atlasScore}/100
@@ -1145,6 +1233,7 @@ function HeroSearch() {
                           )
                         }
                       </span>
+
                     </div>
 
                     <div className="flight-info">
@@ -1234,22 +1323,54 @@ function HeroSearch() {
 
                     </div>
 
+                    <div className="flight-info">
+
+                      <div>
+                        <span>
+                          ✈️ Vuelo
+                        </span>
+
+                        <strong>
+                          {totalVuelo.toFixed(
+                            0
+                          )}{" "}
+                          €
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          🏨 Alojamiento
+                        </span>
+
+                        <strong>
+                          Conexión preparada
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          👥 Viajeros
+                        </span>
+
+                        <strong>
+                          {totalPersonas}
+                        </strong>
+                      </div>
+
+                    </div>
+
                     <div className="flight-card-bottom">
 
                       <div>
 
                         <span>
                           Total orientativo
-                          vuelo
+                          de vuelos
                         </span>
 
                         <strong>
-                          {(
-                            Number(
-                              vuelo.price
-                            ) *
-                            totalViajeros
-                          ).toFixed(
+                          {totalVuelo.toFixed(
                             0
                           )}{" "}
                           €
@@ -1257,15 +1378,46 @@ function HeroSearch() {
 
                       </div>
 
-                      <a
-                        href={obtenerEnlaceVuelo(
-                          vuelo
-                        )}
-                        target="_blank"
-                        rel="noreferrer"
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "row",
+                          gap: "10px",
+                          alignItems: "center",
+                        }}
                       >
-                        VER OPORTUNIDAD
-                      </a>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            prepararAlojamiento(
+                              vuelo
+                            )
+                          }
+                          style={{
+                            border: "1px solid #1463df",
+                            background: "white",
+                            color: "#1463df",
+                            borderRadius: "10px",
+                            padding: "11px 16px",
+                            fontWeight: "800",
+                            fontSize: "12px",
+                          }}
+                        >
+                          BUSCAR ALOJAMIENTO
+                        </button>
+
+                        <a
+                          href={obtenerEnlaceVuelo(
+                            vuelo
+                          )}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          VER VUELO
+                        </a>
+
+                      </div>
 
                     </div>
 
