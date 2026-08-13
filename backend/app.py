@@ -7,9 +7,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 
-# =========================
+# =========================================================
 # CONFIGURACIÓN
-# =========================
+# =========================================================
 
 ENV_PATH = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
@@ -19,35 +19,46 @@ TRAVELPAYOUTS_PROJECT_ID = os.getenv("TRAVELPAYOUTS_PROJECT_ID")
 TRAVELPAYOUTS_PARTNER_ID = os.getenv("TRAVELPAYOUTS_PARTNER_ID")
 
 
-# =========================
+# =========================================================
 # FASTAPI
-# =========================
+# =========================================================
 
-app = FastAPI(title="Atlas API")
+app = FastAPI(
+    title="Atlas API",
+    version="0.1.0",
+)
+
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
+        "http://127.0.0.1:5173",
         "https://atlas-flame-seven.vercel.app",
     ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# =========================
-# INICIO / SALUD
-# =========================
+# =========================================================
+# INICIO
+# =========================================================
 
 @app.get("/")
 def inicio():
     return {
         "app": "Atlas API",
         "estado": "online",
+        "version": "0.1.0",
     }
 
+
+# =========================================================
+# SALUD
+# =========================================================
 
 @app.get("/salud")
 def salud():
@@ -59,14 +70,13 @@ def salud():
     }
 
 
-# =========================
-# VUELOS
-# =========================
+# =========================================================
+# FUNCIÓN INTERNA: BUSCAR VUELOS
+# =========================================================
 
-@app.get("/vuelos")
-async def vuelos(
-    origen: str = "OVD",
-    destino: str = "TFS",
+async def obtener_vuelos(
+    origen: str,
+    destino: str,
     moneda: str = "EUR",
 ):
     if not TRAVELPAYOUTS_API_TOKEN:
@@ -78,10 +88,10 @@ async def vuelos(
     url = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
 
     params = {
-        "origin": origen.upper(),
-        "destination": destino.upper(),
-        "currency": moneda.lower(),
-        "limit": 10,
+        "origin": origen.strip().upper(),
+        "destination": destino.strip().upper(),
+        "currency": moneda.strip().lower(),
+        "limit": 30,
         "page": 1,
         "sorting": "price",
         "direct": "false",
@@ -89,8 +99,18 @@ async def vuelos(
         "token": TRAVELPAYOUTS_API_TOKEN,
     }
 
-    async with httpx.AsyncClient(timeout=20) as client:
-        respuesta = await client.get(url, params=params)
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            respuesta = await client.get(
+                url,
+                params=params,
+            )
+
+    except httpx.RequestError as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo conectar con Travelpayouts: {error}",
+        )
 
     if respuesta.status_code != 200:
         raise HTTPException(
@@ -104,32 +124,74 @@ async def vuelos(
     datos = respuesta.json()
 
     return {
-        "origen": origen.upper(),
-        "destino": destino.upper(),
+        "origen": origen.strip().upper(),
+        "destino": destino.strip().upper(),
         "fuente": "Travelpayouts / Aviasales Data API",
         "tiempo_real": False,
         "resultados": datos,
     }
 
 
-# =========================
-# AUTOCOMPLETADO DE LUGARES
-# =========================
+# =========================================================
+# VUELOS
+# =========================================================
+
+@app.get("/vuelos")
+async def vuelos(
+    origen: str = "OVD",
+    destino: str = "TFS",
+    moneda: str = "EUR",
+):
+    return await obtener_vuelos(
+        origen=origen,
+        destino=destino,
+        moneda=moneda,
+    )
+
+
+@app.get("/vuelos/buscar")
+async def vuelos_buscar(
+    origen: str,
+    destino: str,
+    moneda: str = "EUR",
+):
+    return await obtener_vuelos(
+        origen=origen,
+        destino=destino,
+        moneda=moneda,
+    )
+
+
+# =========================================================
+# AUTOCOMPLETADO DE CIUDADES Y AEROPUERTOS
+# =========================================================
 
 @app.get("/lugares")
 async def buscar_lugares(texto: str):
-    if len(texto.strip()) < 2:
+    texto = texto.strip()
+
+    if len(texto) < 2:
         return []
 
     url = "https://autocomplete.travelpayouts.com/places2"
 
     params = {
-        "term": texto.strip(),
+        "term": texto,
         "locale": "es",
     }
 
-    async with httpx.AsyncClient(timeout=10) as client:
-        respuesta = await client.get(url, params=params)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            respuesta = await client.get(
+                url,
+                params=params,
+            )
+
+    except httpx.RequestError as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo consultar el autocompletado: {error}",
+        )
 
     if respuesta.status_code != 200:
         raise HTTPException(
@@ -158,9 +220,9 @@ async def buscar_lugares(texto: str):
     return resultados
 
 
-# =========================
-# ENLACE AFILIADO
-# =========================
+# =========================================================
+# ENLACES AFILIADOS
+# =========================================================
 
 @app.post("/enlace-afiliado")
 async def crear_enlace_afiliado(url: str):
@@ -201,14 +263,21 @@ async def crear_enlace_afiliado(url: str):
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=20) as client:
-        respuesta = await client.post(
-            endpoint,
-            json=payload,
-            headers=headers,
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            respuesta = await client.post(
+                endpoint,
+                json=payload,
+                headers=headers,
+            )
+
+    except httpx.RequestError as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo conectar con Travelpayouts Links API: {error}",
         )
 
-    if respuesta.status_code != 200:
+    if respuesta.status_code not in (200, 201):
         raise HTTPException(
             status_code=respuesta.status_code,
             detail={
@@ -221,6 +290,7 @@ async def crear_enlace_afiliado(url: str):
 
     try:
         partner_url = datos["links"][0]["partner_url"]
+
     except (KeyError, IndexError, TypeError):
         raise HTTPException(
             status_code=500,
@@ -231,6 +301,7 @@ async def crear_enlace_afiliado(url: str):
         )
 
     return {
+        "ok": True,
         "url_original": url,
         "partner_url": partner_url,
     }
