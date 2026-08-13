@@ -18,13 +18,25 @@ TRAVELPAYOUTS_API_TOKEN = os.getenv("TRAVELPAYOUTS_API_TOKEN")
 TRAVELPAYOUTS_PROJECT_ID = os.getenv("TRAVELPAYOUTS_PROJECT_ID")
 TRAVELPAYOUTS_PARTNER_ID = os.getenv("TRAVELPAYOUTS_PARTNER_ID")
 
+STAYING_API_KEY = os.getenv("STAYING_API_KEY")
 
-# Importamos Travelpayouts DESPUÉS de cargar .env
+
+# =========================================================
+# IMPORTACIONES INTERNAS
+# =========================================================
+
+# Compatibilidad:
+# - ejecución desde raíz: backend.travelpayouts
+# - ejecución desde backend: travelpayouts
 
 try:
     from backend.travelpayouts import buscar_oportunidades_desde
+    from backend.hoteles import buscar_hoteles
+    from backend.viajes import construir_viaje
 except ModuleNotFoundError:
     from travelpayouts import buscar_oportunidades_desde
+    from hoteles import buscar_hoteles
+    from viajes import construir_viaje
 
 # =========================================================
 # FASTAPI
@@ -32,7 +44,7 @@ except ModuleNotFoundError:
 
 app = FastAPI(
     title="Atlas API",
-    version="0.3.0",
+    version="0.4.0",
 )
 
 app.add_middleware(
@@ -58,7 +70,7 @@ def inicio():
     return {
         "app": "Atlas API",
         "estado": "online",
-        "version": "0.3.0",
+        "version": "0.4.0",
     }
 
 
@@ -70,9 +82,18 @@ def inicio():
 def salud():
     return {
         "ok": True,
-        "travelpayouts_configurado": bool(TRAVELPAYOUTS_API_TOKEN),
-        "project_id_configurado": bool(TRAVELPAYOUTS_PROJECT_ID),
-        "partner_id_configurado": bool(TRAVELPAYOUTS_PARTNER_ID),
+        "travelpayouts_configurado": bool(
+            TRAVELPAYOUTS_API_TOKEN
+        ),
+        "project_id_configurado": bool(
+            TRAVELPAYOUTS_PROJECT_ID
+        ),
+        "partner_id_configurado": bool(
+            TRAVELPAYOUTS_PARTNER_ID
+        ),
+        "stayingapi_configurado": bool(
+            STAYING_API_KEY
+        ),
     }
 
 
@@ -93,7 +114,10 @@ async def obtener_vuelos(
             detail="Falta configurar TRAVELPAYOUTS_API_TOKEN",
         )
 
-    url = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
+    url = (
+        "https://api.travelpayouts.com/"
+        "aviasales/v3/prices_for_dates"
+    )
 
     params = {
         "origin": origen.strip().upper(),
@@ -123,14 +147,18 @@ async def obtener_vuelos(
     except httpx.RequestError as error:
         raise HTTPException(
             status_code=502,
-            detail=f"No se pudo conectar con Travelpayouts: {error}",
+            detail=(
+                "No se pudo conectar con "
+                f"Travelpayouts: {error}"
+            ),
         )
 
     if respuesta.status_code != 200:
         raise HTTPException(
             status_code=respuesta.status_code,
             detail={
-                "mensaje": "Travelpayouts devolvió un error",
+                "mensaje":
+                    "Travelpayouts devolvió un error",
                 "respuesta": respuesta.text,
             },
         )
@@ -142,7 +170,8 @@ async def obtener_vuelos(
         "destino": destino.strip().upper(),
         "fecha_ida": fecha_ida,
         "fecha_vuelta": fecha_vuelta,
-        "fuente": "Travelpayouts / Aviasales Data API",
+        "fuente":
+            "Travelpayouts / Aviasales Data API",
         "tiempo_real": False,
         "resultados": datos,
     }
@@ -201,9 +230,6 @@ def oportunidades(
     """
     Busca destinos baratos desde un origen.
 
-    Ejemplo:
-    /oportunidades?origen=OVD&presupuesto=600
-
     Los resultados son oportunidades de precio
     encontradas recientemente, no disponibilidad
     en tiempo real.
@@ -218,7 +244,9 @@ def oportunidades(
     if presupuesto is not None and presupuesto < 0:
         raise HTTPException(
             status_code=400,
-            detail="El presupuesto no puede ser negativo",
+            detail=(
+                "El presupuesto no puede ser negativo"
+            ),
         )
 
     try:
@@ -239,7 +267,10 @@ def oportunidades(
     except Exception as error:
         raise HTTPException(
             status_code=502,
-            detail=f"No se pudieron obtener oportunidades: {error}",
+            detail=(
+                "No se pudieron obtener "
+                f"oportunidades: {error}"
+            ),
         )
 
     return {
@@ -249,11 +280,197 @@ def oportunidades(
         "moneda": moneda.strip().upper(),
         "solo_directos": solo_directos,
         "tiempo_real": False,
-        "fuente": "Travelpayouts / Aviasales Data API",
+        "fuente":
+            "Travelpayouts / Aviasales Data API",
         "total": len(resultados),
         "oportunidades": resultados,
     }
 
+
+# =========================================================
+# HOTELES / ALOJAMIENTOS
+# =========================================================
+
+@app.get("/hoteles")
+def hoteles(
+    destino: str,
+    fecha_entrada: str,
+    fecha_salida: str,
+    adultos: int = 1,
+    ninos: int = 0,
+    moneda: str = "EUR",
+    limite: int = 10,
+):
+    """
+    Busca alojamientos mediante StayingAPI.
+
+    Mientras Atlas utilice una API Key Sandbox,
+    los alojamientos devueltos serán datos de prueba.
+
+    Cuando configuremos una clave Live,
+    este mismo endpoint podrá utilizar datos reales.
+    """
+
+    if adultos < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Debe viajar al menos 1 adulto",
+        )
+
+    if ninos < 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "El número de niños "
+                "no puede ser negativo"
+            ),
+        )
+
+    if limite < 1:
+        limite = 1
+
+    if limite > 30:
+        limite = 30
+
+    try:
+        resultado = buscar_hoteles(
+            destino=destino,
+            fecha_entrada=fecha_entrada,
+            fecha_salida=fecha_salida,
+            adultos=adultos,
+            ninos=ninos,
+            moneda=moneda,
+            limite=limite,
+        )
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
+
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=502,
+            detail=str(error),
+        )
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "No se pudieron obtener "
+                f"alojamientos: {error}"
+            ),
+        )
+
+    return {
+        "ok": True,
+        **resultado,
+    }
+
+# =========================================================
+# VIAJE COMPLETO ATLAS
+# =========================================================
+
+@app.get("/viaje")
+async def viaje(
+    origen: str,
+    destino_codigo: str,
+    destino_nombre: str,
+    fecha_ida: str,
+    fecha_vuelta: str,
+    adultos: int = 1,
+    ninos: int = 0,
+    bebes: int = 0,
+    presupuesto: float | None = None,
+    moneda: str = "EUR",
+):
+    """
+    Construye una oportunidad completa:
+
+    vuelo
+    +
+    alojamiento
+    =
+    total estimado del viaje
+    """
+
+    if adultos < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Debe viajar al menos 1 adulto",
+        )
+
+    if ninos < 0:
+        raise HTTPException(
+            status_code=400,
+            detail="El número de niños no puede ser negativo",
+        )
+
+    if bebes < 0:
+        raise HTTPException(
+            status_code=400,
+            detail="El número de bebés no puede ser negativo",
+        )
+
+    if fecha_vuelta <= fecha_ida:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de vuelta debe ser posterior a la ida",
+        )
+
+    try:
+        respuesta_vuelos = await obtener_vuelos(
+            origen=origen,
+            destino=destino_codigo,
+            moneda=moneda,
+            fecha_ida=fecha_ida,
+            fecha_vuelta=fecha_vuelta,
+        )
+
+        respuesta_hoteles = buscar_hoteles(
+            destino=destino_nombre,
+            fecha_entrada=fecha_ida,
+            fecha_salida=fecha_vuelta,
+            adultos=adultos,
+            ninos=ninos,
+            moneda=moneda,
+            limite=10,
+        )
+
+        resultado = construir_viaje(
+            respuesta_vuelos=respuesta_vuelos,
+            respuesta_hoteles=respuesta_hoteles,
+            adultos=adultos,
+            ninos=ninos,
+            bebes=bebes,
+            presupuesto=presupuesto,
+            moneda=moneda,
+        )
+
+    except HTTPException:
+        raise
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
+
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=502,
+            detail=str(error),
+        )
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo construir el viaje: {error}",
+        )
+
+    return resultado
 
 # =========================================================
 # AUTOCOMPLETADO DE CIUDADES Y AEROPUERTOS
@@ -266,7 +483,10 @@ async def buscar_lugares(texto: str):
     if len(texto) < 2:
         return []
 
-    url = "https://autocomplete.travelpayouts.com/places2"
+    url = (
+        "https://autocomplete.travelpayouts.com/"
+        "places2"
+    )
 
     params = [
         ("term", texto),
@@ -285,13 +505,19 @@ async def buscar_lugares(texto: str):
     except httpx.RequestError as error:
         raise HTTPException(
             status_code=502,
-            detail=f"No se pudo consultar el autocompletado: {error}",
+            detail=(
+                "No se pudo consultar "
+                f"el autocompletado: {error}"
+            ),
         )
 
     if respuesta.status_code != 200:
         raise HTTPException(
             status_code=respuesta.status_code,
-            detail="No se pudieron buscar ciudades o aeropuertos",
+            detail=(
+                "No se pudieron buscar "
+                "ciudades o aeropuertos"
+            ),
         )
 
     datos = respuesta.json()
@@ -315,17 +541,25 @@ async def buscar_lugares(texto: str):
         if tipo not in ("city", "airport"):
             continue
 
-        if len(codigo) != 3 or not codigo.isalpha():
+        if (
+            len(codigo) != 3
+            or not codigo.isalpha()
+        ):
             continue
 
         nombre_busqueda = nombre.casefold()
 
         if nombre_busqueda == texto_busqueda:
             prioridad = 0
-        elif nombre_busqueda.startswith(texto_busqueda):
+
+        elif nombre_busqueda.startswith(
+            texto_busqueda
+        ):
             prioridad = 1
+
         elif texto_busqueda in nombre_busqueda:
             prioridad = 2
+
         else:
             prioridad = 3
 
@@ -336,8 +570,10 @@ async def buscar_lugares(texto: str):
                 "tipo": tipo,
                 "pais": pais,
                 "pais_codigo": pais_codigo,
-                "ciudad_codigo": ciudad_codigo,
-                "ciudad_nombre": ciudad_nombre,
+                "ciudad_codigo":
+                    ciudad_codigo,
+                "ciudad_nombre":
+                    ciudad_nombre,
                 "_prioridad": prioridad,
                 "_peso": peso,
             }
@@ -353,8 +589,15 @@ async def buscar_lugares(texto: str):
     resultados = resultados[:8]
 
     for lugar in resultados:
-        lugar.pop("_prioridad", None)
-        lugar.pop("_peso", None)
+        lugar.pop(
+            "_prioridad",
+            None,
+        )
+
+        lugar.pop(
+            "_peso",
+            None,
+        )
 
     return resultados
 
@@ -368,26 +611,42 @@ async def crear_enlace_afiliado(url: str):
     if not TRAVELPAYOUTS_API_TOKEN:
         raise HTTPException(
             status_code=500,
-            detail="Falta TRAVELPAYOUTS_API_TOKEN",
+            detail=(
+                "Falta "
+                "TRAVELPAYOUTS_API_TOKEN"
+            ),
         )
 
     if not TRAVELPAYOUTS_PROJECT_ID:
         raise HTTPException(
             status_code=500,
-            detail="Falta TRAVELPAYOUTS_PROJECT_ID",
+            detail=(
+                "Falta "
+                "TRAVELPAYOUTS_PROJECT_ID"
+            ),
         )
 
     if not TRAVELPAYOUTS_PARTNER_ID:
         raise HTTPException(
             status_code=500,
-            detail="Falta TRAVELPAYOUTS_PARTNER_ID",
+            detail=(
+                "Falta "
+                "TRAVELPAYOUTS_PARTNER_ID"
+            ),
         )
 
-    endpoint = "https://api.travelpayouts.com/links/v1/create"
+    endpoint = (
+        "https://api.travelpayouts.com/"
+        "links/v1/create"
+    )
 
     payload = {
-        "trs": int(TRAVELPAYOUTS_PROJECT_ID),
-        "marker": int(TRAVELPAYOUTS_PARTNER_ID),
+        "trs": int(
+            TRAVELPAYOUTS_PROJECT_ID
+        ),
+        "marker": int(
+            TRAVELPAYOUTS_PARTNER_ID
+        ),
         "shorten": True,
         "links": [
             {
@@ -398,8 +657,10 @@ async def crear_enlace_afiliado(url: str):
     }
 
     headers = {
-        "X-Access-Token": TRAVELPAYOUTS_API_TOKEN,
-        "Content-Type": "application/json",
+        "X-Access-Token":
+            TRAVELPAYOUTS_API_TOKEN,
+        "Content-Type":
+            "application/json",
     }
 
     try:
@@ -413,28 +674,48 @@ async def crear_enlace_afiliado(url: str):
     except httpx.RequestError as error:
         raise HTTPException(
             status_code=502,
-            detail=f"No se pudo conectar con Travelpayouts Links API: {error}",
+            detail=(
+                "No se pudo conectar con "
+                "Travelpayouts Links API: "
+                f"{error}"
+            ),
         )
 
-    if respuesta.status_code not in (200, 201):
+    if respuesta.status_code not in (
+        200,
+        201,
+    ):
         raise HTTPException(
             status_code=respuesta.status_code,
             detail={
-                "mensaje": "No se pudo generar el enlace afiliado",
-                "respuesta": respuesta.text,
+                "mensaje":
+                    "No se pudo generar "
+                    "el enlace afiliado",
+                "respuesta":
+                    respuesta.text,
             },
         )
 
     datos = respuesta.json()
 
     try:
-        partner_url = datos["links"][0]["partner_url"]
+        partner_url = (
+            datos["links"][0][
+                "partner_url"
+            ]
+        )
 
-    except (KeyError, IndexError, TypeError):
+    except (
+        KeyError,
+        IndexError,
+        TypeError,
+    ):
         raise HTTPException(
             status_code=500,
             detail={
-                "mensaje": "Travelpayouts no devolvió partner_url",
+                "mensaje":
+                    "Travelpayouts no devolvió "
+                    "partner_url",
                 "respuesta": datos,
             },
         )
