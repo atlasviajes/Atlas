@@ -191,8 +191,13 @@ function HeroSearch() {
       return Infinity;
     }
 
-    const a = new Date(`${fechaA.slice(0, 10)}T00:00:00`);
-    const b = new Date(`${fechaB.slice(0, 10)}T00:00:00`);
+    const a = new Date(
+      `${fechaA.slice(0, 10)}T00:00:00`
+    );
+
+    const b = new Date(
+      `${fechaB.slice(0, 10)}T00:00:00`
+    );
 
     const diferencia = Math.abs(a - b);
 
@@ -242,6 +247,151 @@ function HeroSearch() {
     return "#";
   };
 
+  const calcularAtlasScore = (vuelo) => {
+    let score = 0;
+
+    const precio = Number(vuelo.price) || 0;
+    const totalEstimado =
+      precio * totalViajeros;
+
+    // PRECIO: máximo 40 puntos
+    if (presupuesto && Number(presupuesto) > 0) {
+      const porcentaje =
+        totalEstimado /
+        Number(presupuesto);
+
+      if (porcentaje <= 0.35) {
+        score += 40;
+      } else if (porcentaje <= 0.5) {
+        score += 35;
+      } else if (porcentaje <= 0.7) {
+        score += 30;
+      } else if (porcentaje <= 0.85) {
+        score += 22;
+      } else if (porcentaje <= 1) {
+        score += 15;
+      }
+    } else {
+      score += 25;
+    }
+
+    // ESCALAS: máximo 25 puntos
+    const escalasIda =
+      Number(vuelo.transfers) || 0;
+
+    const escalasVuelta =
+      Number(vuelo.return_transfers) || 0;
+
+    const escalasTotales =
+      escalasIda + escalasVuelta;
+
+    if (escalasTotales === 0) {
+      score += 25;
+    } else if (escalasTotales === 1) {
+      score += 18;
+    } else if (escalasTotales === 2) {
+      score += 10;
+    } else {
+      score += 3;
+    }
+
+    // DURACIÓN: máximo 20 puntos
+    const duracion =
+      Number(vuelo.duration) || 0;
+
+    if (duracion > 0 && duracion <= 240) {
+      score += 20;
+    } else if (duracion <= 480) {
+      score += 16;
+    } else if (duracion <= 720) {
+      score += 10;
+    } else if (duracion <= 1200) {
+      score += 5;
+    }
+
+    // CERCANÍA A FECHAS: máximo 15 puntos
+    if (
+      modoResultados === "fechas" &&
+      fechaIda &&
+      fechaVuelta
+    ) {
+      const diferenciaIda =
+        diferenciaDias(
+          vuelo.departure_at,
+          fechaIda
+        );
+
+      const diferenciaVuelta =
+        diferenciaDias(
+          vuelo.return_at,
+          fechaVuelta
+        );
+
+      const diferenciaMedia =
+        (diferenciaIda +
+          diferenciaVuelta) /
+        2;
+
+      if (diferenciaMedia <= 2) {
+        score += 15;
+      } else if (diferenciaMedia <= 7) {
+        score += 12;
+      } else if (diferenciaMedia <= 15) {
+        score += 8;
+      } else if (diferenciaMedia <= 30) {
+        score += 4;
+      }
+    } else {
+      score += 10;
+    }
+
+    return Math.min(
+      100,
+      Math.round(score)
+    );
+  };
+
+  const textoAtlasScore = (score) => {
+    if (score >= 90) {
+      return "Excelente oportunidad";
+    }
+
+    if (score >= 80) {
+      return "Muy buena oportunidad";
+    }
+
+    if (score >= 70) {
+      return "Buena oportunidad";
+    }
+
+    if (score >= 60) {
+      return "Interesante";
+    }
+
+    return "Opción disponible";
+  };
+
+  const ordenarPorAtlasScore = (lista) => {
+    return [...lista].sort(
+      (a, b) => {
+        const scoreA =
+          calcularAtlasScore(a);
+
+        const scoreB =
+          calcularAtlasScore(b);
+
+        if (scoreB !== scoreA) {
+          return scoreB - scoreA;
+        }
+
+        return (
+          Number(a.price) -
+          Number(b.price)
+        );
+      }
+    );
+  };
+
   const aplicarPresupuesto = (lista) => {
     if (!presupuesto) {
       return lista;
@@ -252,19 +402,14 @@ function HeroSearch() {
         Number(vuelo.price) || 0;
 
       const totalOrientativo =
-        precioPorPersona * totalViajeros;
+        precioPorPersona *
+        totalViajeros;
 
       return (
-        totalOrientativo <= Number(presupuesto)
+        totalOrientativo <=
+        Number(presupuesto)
       );
     });
-  };
-
-  const ordenarPorPrecio = (lista) => {
-    return [...lista].sort(
-      (a, b) =>
-        Number(a.price) - Number(b.price)
-    );
   };
 
   const buscarViaje = async () => {
@@ -305,7 +450,8 @@ function HeroSearch() {
         "EUR"
       );
 
-      const respuesta = await fetch(url);
+      const respuesta =
+        await fetch(url);
 
       if (!respuesta.ok) {
         throw new Error(
@@ -319,38 +465,32 @@ function HeroSearch() {
       let lista =
         datos?.resultados?.data || [];
 
-      /*
-       * La Data API no ofrece disponibilidad
-       * exacta en tiempo real.
-       *
-       * Solo aceptamos ofertas cuya ida y vuelta
-       * estén como máximo a 30 días de las
-       * fechas solicitadas.
-       */
-      lista = lista.filter((vuelo) => {
-        const diferenciaIda =
-          diferenciaDias(
-            vuelo.departure_at,
-            fechaIda
-          );
+      lista = lista.filter(
+        (vuelo) => {
+          const diferenciaIda =
+            diferenciaDias(
+              vuelo.departure_at,
+              fechaIda
+            );
 
-        const diferenciaVuelta =
-          diferenciaDias(
-            vuelo.return_at,
-            fechaVuelta
-          );
+          const diferenciaVuelta =
+            diferenciaDias(
+              vuelo.return_at,
+              fechaVuelta
+            );
 
-        return (
-          diferenciaIda <= 30 &&
-          diferenciaVuelta <= 30
-        );
-      });
+          return (
+            diferenciaIda <= 30 &&
+            diferenciaVuelta <= 30
+          );
+        }
+      );
 
       lista =
         aplicarPresupuesto(lista);
 
       lista =
-        ordenarPorPrecio(lista);
+        ordenarPorAtlasScore(lista);
 
       setVuelos(lista);
 
@@ -360,11 +500,11 @@ function HeroSearch() {
             lista.length === 1
               ? "oportunidad"
               : "oportunidades"
-          } cercanas a tus fechas.`
+          } y las ha ordenado por Atlas Score.`
         );
       } else {
         setMensaje(
-          "No hemos encontrado oportunidades recientes suficientemente cercanas a esas fechas. Prueba OFERTAS AHORA para ver las mejores opciones disponibles para esta ruta."
+          "No hemos encontrado oportunidades recientes suficientemente cercanas a esas fechas. Prueba OFERTAS AHORA para descubrir otros destinos."
         );
       }
     } catch (error) {
@@ -379,25 +519,29 @@ function HeroSearch() {
   };
 
   const buscarOfertasAhora = async () => {
-    const validacion = validarRuta();
+    const codigoOrigen =
+      obtenerCodigo(
+        origenCodigo,
+        origenTexto
+      );
 
-    if (!validacion) {
+    if (!codigoOrigen) {
+      setMensaje(
+        "Selecciona primero un origen."
+      );
       return;
     }
-
-    const {
-      codigoOrigen,
-      codigoDestino,
-    } = validacion;
 
     setBuscandoOfertas(true);
     setMensaje("");
     setVuelos([]);
-    setModoResultados("ofertas");
+    setModoResultados(
+      "oportunidades"
+    );
 
     try {
       const url = new URL(
-        `${API_URL}/vuelos`
+        `${API_URL}/oportunidades`
       );
 
       url.searchParams.set(
@@ -406,52 +550,123 @@ function HeroSearch() {
       );
 
       url.searchParams.set(
-        "destino",
-        codigoDestino
-      );
-
-      url.searchParams.set(
         "moneda",
         "EUR"
       );
+
+      url.searchParams.set(
+        "limite",
+        "30"
+      );
+
+      if (
+        presupuesto &&
+        totalViajeros > 0
+      ) {
+        const presupuestoPorPersona =
+          Number(presupuesto) /
+          totalViajeros;
+
+        url.searchParams.set(
+          "presupuesto",
+          presupuestoPorPersona.toFixed(
+            2
+          )
+        );
+      }
 
       const respuesta =
         await fetch(url);
 
       if (!respuesta.ok) {
         throw new Error(
-          "No se pudieron obtener ofertas"
+          "No se pudieron obtener oportunidades"
         );
       }
 
       const datos =
         await respuesta.json();
 
-      let lista =
-        datos?.resultados?.data || [];
+      const oportunidades =
+        datos?.oportunidades || [];
 
-      lista =
-        aplicarPresupuesto(lista);
+      let listaAdaptada =
+        oportunidades.map(
+          (oportunidad) => ({
+            modo: "oportunidad",
 
-      lista =
-        ordenarPorPrecio(lista);
+            origin_airport:
+              oportunidad.origen,
 
-      setVuelos(lista);
+            destination_airport:
+              oportunidad.destino,
 
-      if (lista.length > 0) {
+            destination_name:
+              oportunidad.destino_nombre ||
+              oportunidad.destino,
+
+            destination_country:
+              oportunidad.destino_pais_codigo ||
+              "",
+
+            price:
+              oportunidad.precio,
+
+            departure_at:
+              oportunidad.salida,
+
+            return_at:
+              oportunidad.regreso,
+
+            airline:
+              oportunidad.aerolinea,
+
+            flight_number:
+              oportunidad.numero_vuelo,
+
+            duration:
+              oportunidad.duracion,
+
+            transfers:
+              oportunidad.escalas_ida,
+
+            return_transfers:
+              oportunidad.escalas_vuelta,
+
+            direct:
+              oportunidad.directo,
+
+            gate:
+              oportunidad.proveedor,
+
+            link:
+              oportunidad.link,
+          })
+        );
+
+      listaAdaptada =
+        ordenarPorAtlasScore(
+          listaAdaptada
+        );
+
+      setVuelos(listaAdaptada);
+
+      if (
+        listaAdaptada.length > 0
+      ) {
         setMensaje(
-          `Atlas ha encontrado ${lista.length} oportunidades de precio para esta ruta.`
+          `Atlas ha encontrado ${listaAdaptada.length} destinos y los ha ordenado por calidad de oportunidad.`
         );
       } else {
         setMensaje(
-          "No hay oportunidades dentro del presupuesto indicado."
+          "No hemos encontrado destinos dentro de ese presupuesto. Prueba aumentando el presupuesto."
         );
       }
     } catch (error) {
       console.error(error);
 
       setMensaje(
-        "No se pudieron consultar las ofertas de Atlas."
+        "No se pudieron consultar las oportunidades de Atlas."
       );
     } finally {
       setBuscandoOfertas(false);
@@ -462,6 +677,7 @@ function HeroSearch() {
     <>
       <section className="hero">
         <div className="hero-overlay">
+
           <div className="hero-copy">
             <h2>
               ¿A dónde quieres ir?
@@ -474,6 +690,7 @@ function HeroSearch() {
           </div>
 
           <div className="hero-search">
+
             <div className="hero-field autocomplete-field">
               <span>Origen</span>
 
@@ -489,10 +706,14 @@ function HeroSearch() {
                 autoComplete="off"
               />
 
-              {sugerenciasOrigen.length > 0 && (
+              {sugerenciasOrigen.length >
+                0 && (
                 <div className="autocomplete-list">
                   {sugerenciasOrigen.map(
-                    (lugar, index) => (
+                    (
+                      lugar,
+                      index
+                    ) => (
                       <button
                         type="button"
                         key={`${lugar.codigo}-${index}`}
@@ -503,11 +724,17 @@ function HeroSearch() {
                         }
                       >
                         <strong>
-                          {lugar.nombre}
+                          {
+                            lugar.nombre
+                          }
                         </strong>
 
-                        <span translate="no">
-                          {lugar.codigo}
+                        <span
+                          translate="no"
+                        >
+                          {
+                            lugar.codigo
+                          }
                         </span>
                       </button>
                     )
@@ -531,10 +758,14 @@ function HeroSearch() {
                 autoComplete="off"
               />
 
-              {sugerenciasDestino.length > 0 && (
+              {sugerenciasDestino.length >
+                0 && (
                 <div className="autocomplete-list">
                   {sugerenciasDestino.map(
-                    (lugar, index) => (
+                    (
+                      lugar,
+                      index
+                    ) => (
                       <button
                         type="button"
                         key={`${lugar.codigo}-${index}`}
@@ -545,11 +776,17 @@ function HeroSearch() {
                         }
                       >
                         <strong>
-                          {lugar.nombre}
+                          {
+                            lugar.nombre
+                          }
                         </strong>
 
-                        <span translate="no">
-                          {lugar.codigo}
+                        <span
+                          translate="no"
+                        >
+                          {
+                            lugar.codigo
+                          }
                         </span>
                       </button>
                     )
@@ -575,7 +812,9 @@ function HeroSearch() {
                     e.target.value >
                       fechaVuelta
                   ) {
-                    setFechaVuelta("");
+                    setFechaVuelta(
+                      ""
+                    );
                   }
                 }}
               />
@@ -587,7 +826,9 @@ function HeroSearch() {
               <input
                 type="date"
                 value={fechaVuelta}
-                min={fechaIda || hoy}
+                min={
+                  fechaIda || hoy
+                }
                 onChange={(e) =>
                   setFechaVuelta(
                     e.target.value
@@ -597,9 +838,7 @@ function HeroSearch() {
             </div>
 
             <div className="hero-field">
-              <span>
-                Adultos
-              </span>
+              <span>Adultos</span>
 
               <select
                 value={adultos}
@@ -611,33 +850,19 @@ function HeroSearch() {
                   )
                 }
               >
-                <option value={1}>
-                  1 adulto
-                </option>
-                <option value={2}>
-                  2 adultos
-                </option>
-                <option value={3}>
-                  3 adultos
-                </option>
-                <option value={4}>
-                  4 adultos
-                </option>
-                <option value={5}>
-                  5 adultos
-                </option>
-                <option value={6}>
-                  6 adultos
-                </option>
-                <option value={7}>
-                  7 adultos
-                </option>
-                <option value={8}>
-                  8 adultos
-                </option>
-                <option value={9}>
-                  9 adultos
-                </option>
+                {[1,2,3,4,5,6,7,8,9].map(
+                  (numero) => (
+                    <option
+                      key={numero}
+                      value={numero}
+                    >
+                      {numero}{" "}
+                      {numero === 1
+                        ? "adulto"
+                        : "adultos"}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
@@ -656,27 +881,19 @@ function HeroSearch() {
                   )
                 }
               >
-                <option value={0}>
-                  0 niños
-                </option>
-                <option value={1}>
-                  1 niño
-                </option>
-                <option value={2}>
-                  2 niños
-                </option>
-                <option value={3}>
-                  3 niños
-                </option>
-                <option value={4}>
-                  4 niños
-                </option>
-                <option value={5}>
-                  5 niños
-                </option>
-                <option value={6}>
-                  6 niños
-                </option>
+                {[0,1,2,3,4,5,6].map(
+                  (numero) => (
+                    <option
+                      key={numero}
+                      value={numero}
+                    >
+                      {numero}{" "}
+                      {numero === 1
+                        ? "niño"
+                        : "niños"}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
@@ -695,27 +912,25 @@ function HeroSearch() {
                   )
                 }
               >
-                <option value={0}>
-                  0 bebés
-                </option>
-                <option value={1}>
-                  1 bebé
-                </option>
-                <option value={2}>
-                  2 bebés
-                </option>
-                <option value={3}>
-                  3 bebés
-                </option>
-                <option value={4}>
-                  4 bebés
-                </option>
+                {[0,1,2,3,4].map(
+                  (numero) => (
+                    <option
+                      key={numero}
+                      value={numero}
+                    >
+                      {numero}{" "}
+                      {numero === 1
+                        ? "bebé"
+                        : "bebés"}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
             <div className="hero-field">
               <span>
-                Presupuesto máx.
+                Presupuesto total máx.
               </span>
 
               <input
@@ -730,6 +945,7 @@ function HeroSearch() {
                 min="0"
               />
             </div>
+
           </div>
 
           <div className="traveler-summary">
@@ -750,21 +966,25 @@ function HeroSearch() {
           </button>
 
           <div className="hero-actions">
+
             <button
-              onClick={buscarOfertasAhora}
+              onClick={
+                buscarOfertasAhora
+              }
               disabled={
                 buscando ||
                 buscandoOfertas
               }
             >
               {buscandoOfertas
-                ? "BUSCANDO OFERTAS..."
+                ? "BUSCANDO DESTINOS..."
                 : "⚡ OFERTAS AHORA"}
             </button>
 
             <button>
               🔔 ATLAS, AVÍSAME
             </button>
+
           </div>
         </div>
       </section>
@@ -779,194 +999,283 @@ function HeroSearch() {
 
       {vuelos.length > 0 && (
         <section className="flight-results">
+
           <div className="section-title">
             <div>
+
               <h2>
                 {modoResultados ===
                 "fechas"
                   ? "🔎 Oportunidades cercanas a tus fechas"
-                  : "⚡ Mejores oportunidades encontradas"}
+                  : "⚡ Mejores oportunidades Atlas"}
               </h2>
 
-              <p>
-                {origenTexto} →{" "}
-                {destinoTexto}
-              </p>
-
               {modoResultados ===
-                "fechas" && (
+              "fechas" ? (
+                <>
+                  <p>
+                    {origenTexto} →{" "}
+                    {destinoTexto}
+                  </p>
+
+                  <p>
+                    Tú pediste:{" "}
+                    {fechaIda} →{" "}
+                    {fechaVuelta}
+                  </p>
+                </>
+              ) : (
                 <p>
-                  Tú pediste:{" "}
-                  {fechaIda} →{" "}
-                  {fechaVuelta}
+                  Desde{" "}
+                  {origenTexto} ·{" "}
+                  {textoViajeros()} ·
+                  máximo{" "}
+                  {presupuesto ||
+                    "sin límite"}{" "}
+                  €
                 </p>
               )}
 
               <small>
-                Los precios son
-                orientativos y proceden
-                de búsquedas recientes.
-                La disponibilidad y el
-                precio final se confirman
-                con el proveedor.
+                Atlas Score combina
+                precio, escalas,
+                duración y cercanía a
+                tus fechas. Los precios
+                proceden de búsquedas
+                recientes y deben
+                confirmarse con el
+                proveedor.
               </small>
+
             </div>
           </div>
 
           <div className="flight-grid">
+
             {vuelos.map(
-              (vuelo, index) => (
-                <article
-                  className="flight-card"
-                  key={`${vuelo.flight_number}-${vuelo.departure_at}-${index}`}
-                >
-                  <div className="flight-card-top">
-                    <div>
-                      <span
-                        className="flight-route"
-                        translate="no"
-                      >
-                        {vuelo.origin_airport}{" "}
-                        →{" "}
-                        {
-                          vuelo.destination_airport
-                        }
-                      </span>
+              (
+                vuelo,
+                index
+              ) => {
+                const atlasScore =
+                  calcularAtlasScore(
+                    vuelo
+                  );
 
-                      <h3>
-                        {vuelo.airline} ·
-                        Vuelo{" "}
-                        {
-                          vuelo.flight_number
-                        }
-                      </h3>
-                    </div>
+                return (
+                  <article
+                    className="flight-card"
+                    key={`${vuelo.destination_airport}-${vuelo.departure_at}-${index}`}
+                  >
 
-                    <div className="flight-price">
-                      <strong>
-                        {vuelo.price} €
-                      </strong>
+                    <div className="flight-card-top">
 
-                      <span>
-                        precio orientativo
-                        por persona
-                      </span>
-                    </div>
-                  </div>
+                      <div>
 
-                  <div className="flight-info">
-                    <div>
-                      <span>
-                        Ida encontrada
-                      </span>
+                        {modoResultados ===
+                          "oportunidades" && (
+                          <>
+                            <h2>
+                              {
+                                vuelo.destination_name
+                              }
+                            </h2>
 
-                      <strong>
-                        {formatearFecha(
-                          vuelo.departure_at
+                            {vuelo.destination_country && (
+                              <small>
+                                {
+                                  vuelo.destination_country
+                                }
+                              </small>
+                            )}
+                          </>
                         )}
-                      </strong>
-                    </div>
 
-                    <div>
-                      <span>
-                        Vuelta encontrada
-                      </span>
+                        <span
+                          className="flight-route"
+                          translate="no"
+                        >
+                          {
+                            vuelo.origin_airport
+                          }{" "}
+                          →{" "}
+                          {
+                            vuelo.destination_airport
+                          }
+                        </span>
 
-                      <strong>
-                        {formatearFecha(
-                          vuelo.return_at
-                        )}
-                      </strong>
-                    </div>
+                        <h3>
+                          {vuelo.airline
+                            ? `${vuelo.airline} · Vuelo ${
+                                vuelo.flight_number ||
+                                ""
+                              }`
+                            : "Oportunidad encontrada por Atlas"}
+                        </h3>
 
-                    <div>
-                      <span>Ida</span>
+                      </div>
 
-                      <strong>
-                        {vuelo.transfers ===
-                        0
-                          ? "Directo"
-                          : `${vuelo.transfers} escala${
-                              vuelo.transfers >
-                              1
-                                ? "s"
-                                : ""
-                            }`}
-                      </strong>
-                    </div>
+                      <div className="flight-price">
 
-                    <div>
-                      <span>
-                        Vuelta
-                      </span>
-
-                      <strong>
-                        {vuelo.return_transfers ===
-                        0
-                          ? "Directo"
-                          : `${vuelo.return_transfers} escala${
-                              vuelo.return_transfers >
-                              1
-                                ? "s"
-                                : ""
-                            }`}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span>
-                        Duración total
-                      </span>
-
-                      <strong>
-                        {formatearDuracion(
-                          vuelo.duration
-                        )}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span>
-                        Proveedor
-                      </span>
-
-                      <strong>
-                        {vuelo.gate}
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div className="flight-card-bottom">
-                    <div>
-                      <span>
-                        Total orientativo
-                      </span>
-
-                      <strong>
-                        {(
-                          Number(
+                        <strong>
+                          {
                             vuelo.price
-                          ) *
-                          totalViajeros
-                        ).toFixed(0)}{" "}
-                        €
-                      </strong>
+                          }{" "}
+                          €
+                        </strong>
+
+                        <span>
+                          por persona
+                        </span>
+
+                      </div>
+
                     </div>
 
-                    <a
-                      href={obtenerEnlaceVuelo(
-                        vuelo
-                      )}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      COMPROBAR PRECIO FINAL
-                    </a>
-                  </div>
-                </article>
-              )
+                    <div className="atlas-score">
+                      <strong>
+                        ⭐ Atlas Score{" "}
+                        {atlasScore}/100
+                      </strong>
+
+                      <span>
+                        {
+                          textoAtlasScore(
+                            atlasScore
+                          )
+                        }
+                      </span>
+                    </div>
+
+                    <div className="flight-info">
+
+                      <div>
+                        <span>
+                          Ida encontrada
+                        </span>
+
+                        <strong>
+                          {formatearFecha(
+                            vuelo.departure_at
+                          )}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Vuelta encontrada
+                        </span>
+
+                        <strong>
+                          {formatearFecha(
+                            vuelo.return_at
+                          )}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Ida
+                        </span>
+
+                        <strong>
+                          {vuelo.transfers ===
+                          0
+                            ? "Directo"
+                            : `${vuelo.transfers} escala${
+                                vuelo.transfers >
+                                1
+                                  ? "s"
+                                  : ""
+                              }`}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Vuelta
+                        </span>
+
+                        <strong>
+                          {vuelo.return_transfers ===
+                          0
+                            ? "Directo"
+                            : `${vuelo.return_transfers} escala${
+                                vuelo.return_transfers >
+                                1
+                                  ? "s"
+                                  : ""
+                              }`}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Duración total
+                        </span>
+
+                        <strong>
+                          {formatearDuracion(
+                            vuelo.duration
+                          )}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Proveedor
+                        </span>
+
+                        <strong>
+                          {vuelo.gate ||
+                            "-"}
+                        </strong>
+                      </div>
+
+                    </div>
+
+                    <div className="flight-card-bottom">
+
+                      <div>
+
+                        <span>
+                          Total orientativo
+                          vuelo
+                        </span>
+
+                        <strong>
+                          {(
+                            Number(
+                              vuelo.price
+                            ) *
+                            totalViajeros
+                          ).toFixed(
+                            0
+                          )}{" "}
+                          €
+                        </strong>
+
+                      </div>
+
+                      <a
+                        href={obtenerEnlaceVuelo(
+                          vuelo
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        VER OPORTUNIDAD
+                      </a>
+
+                    </div>
+
+                  </article>
+                );
+              }
             )}
+
           </div>
+
         </section>
       )}
     </>

@@ -13,6 +13,10 @@ TRAVELPAYOUTS_API_TOKEN = os.getenv("TRAVELPAYOUTS_API_TOKEN")
 API_BASE = "https://api.travelpayouts.com"
 AVIASALES_BASE = "https://www.aviasales.com"
 
+CIUDADES_URL = f"{API_BASE}/data/es/cities.json"
+
+_cache_ciudades = None
+
 
 # =========================================================
 # UTILIDADES
@@ -29,9 +33,6 @@ def generar_link_aviasales(link):
     """
     Convierte el link devuelto por Travelpayouts
     en una URL completa de Aviasales.
-
-    La conversión a enlace afiliado se puede hacer
-    posteriormente desde el backend de Atlas.
     """
 
     if not link:
@@ -44,6 +45,97 @@ def generar_link_aviasales(link):
         return f"{AVIASALES_BASE}{link}"
 
     return f"{AVIASALES_BASE}/{link}"
+
+
+def cargar_ciudades():
+    """
+    Descarga la base oficial de ciudades de Travelpayouts
+    en español y la guarda en memoria.
+
+    Devuelve un diccionario:
+    {
+        "LON": {...},
+        "PMI": {...},
+        ...
+    }
+    """
+
+    global _cache_ciudades
+
+    if _cache_ciudades is not None:
+        return _cache_ciudades
+
+    try:
+        respuesta = requests.get(
+            CIUDADES_URL,
+            timeout=20,
+            headers={
+                "Accept-Encoding": "gzip, deflate",
+            },
+        )
+
+        respuesta.raise_for_status()
+
+        datos = respuesta.json()
+
+        ciudades = {}
+
+        for ciudad in datos:
+            codigo = ciudad.get("code")
+
+            if not codigo:
+                continue
+
+            ciudades[codigo.upper()] = ciudad
+
+        _cache_ciudades = ciudades
+
+    except requests.RequestException:
+        _cache_ciudades = {}
+
+    except ValueError:
+        _cache_ciudades = {}
+
+    return _cache_ciudades
+
+
+def obtener_datos_ciudad(codigo):
+    """
+    Busca los datos de una ciudad por código IATA.
+    """
+
+    if not codigo:
+        return {
+            "nombre": None,
+            "pais_codigo": None,
+        }
+
+    ciudades = cargar_ciudades()
+
+    ciudad = ciudades.get(
+        codigo.upper(),
+        {}
+    )
+
+    nombre = ciudad.get("name")
+
+    if not nombre:
+        traducciones = ciudad.get(
+            "name_translations",
+            {}
+        )
+
+        nombre = (
+            traducciones.get("es")
+            or traducciones.get("en")
+        )
+
+    return {
+        "nombre": nombre or codigo.upper(),
+        "pais_codigo": ciudad.get(
+            "country_code"
+        ),
+    }
 
 
 # =========================================================
@@ -107,22 +199,60 @@ def buscar_vuelos(
     resultados = []
 
     for vuelo in vuelos:
+        destino_codigo = vuelo.get(
+            "destination"
+        )
+
+        datos_destino = obtener_datos_ciudad(
+            destino_codigo
+        )
+
         resultados.append(
             {
-                "origen": vuelo.get("origin"),
-                "destino": vuelo.get("destination"),
-                "precio": vuelo.get("price"),
+                "origen": vuelo.get(
+                    "origin"
+                ),
+                "destino": destino_codigo,
+                "destino_nombre":
+                    datos_destino["nombre"],
+                "destino_pais_codigo":
+                    datos_destino[
+                        "pais_codigo"
+                    ],
+                "precio": vuelo.get(
+                    "price"
+                ),
                 "moneda": moneda.upper(),
-                "salida": vuelo.get("departure_at"),
-                "regreso": vuelo.get("return_at"),
-                "aerolinea": vuelo.get("airline"),
-                "numero_vuelo": vuelo.get("flight_number"),
-                "duracion": vuelo.get("duration"),
-                "duracion_ida": vuelo.get("duration_to"),
-                "duracion_vuelta": vuelo.get("duration_back"),
-                "escalas": vuelo.get("transfers"),
-                "escalas_vuelta": vuelo.get("return_transfers"),
-                "proveedor": vuelo.get("gate"),
+                "salida": vuelo.get(
+                    "departure_at"
+                ),
+                "regreso": vuelo.get(
+                    "return_at"
+                ),
+                "aerolinea": vuelo.get(
+                    "airline"
+                ),
+                "numero_vuelo": vuelo.get(
+                    "flight_number"
+                ),
+                "duracion": vuelo.get(
+                    "duration"
+                ),
+                "duracion_ida": vuelo.get(
+                    "duration_to"
+                ),
+                "duracion_vuelta": vuelo.get(
+                    "duration_back"
+                ),
+                "escalas": vuelo.get(
+                    "transfers"
+                ),
+                "escalas_vuelta": vuelo.get(
+                    "return_transfers"
+                ),
+                "proveedor": vuelo.get(
+                    "gate"
+                ),
                 "link": generar_link_aviasales(
                     vuelo.get("link")
                 ),
@@ -196,28 +326,41 @@ def buscar_oportunidades_desde(
     destinos_vistos = set()
 
     for vuelo in vuelos:
-        destino = vuelo.get("destination")
-        precio = vuelo.get("price")
+        destino = vuelo.get(
+            "destination"
+        )
+
+        precio = vuelo.get(
+            "price"
+        )
 
         if not destino or precio is None:
             continue
 
         try:
-            precio_numero = float(precio)
+            precio_numero = float(
+                precio
+            )
         except (TypeError, ValueError):
             continue
 
         if presupuesto is not None:
-            if precio_numero > float(presupuesto):
+            if precio_numero > float(
+                presupuesto
+            ):
                 continue
 
-        # Una sola oportunidad por destino.
         if destino in destinos_vistos:
             continue
 
-        destinos_vistos.add(destino)
+        destinos_vistos.add(
+            destino
+        )
 
-        escalas_ida = vuelo.get("transfers")
+        escalas_ida = vuelo.get(
+            "transfers"
+        )
+
         escalas_vuelta = vuelo.get(
             "return_transfers"
         )
@@ -227,29 +370,56 @@ def buscar_oportunidades_desde(
             and escalas_vuelta == 0
         )
 
+        datos_destino = obtener_datos_ciudad(
+            destino
+        )
+
         oportunidades.append(
             {
-                "origen": vuelo.get("origin"),
+                "origen": vuelo.get(
+                    "origin"
+                ),
                 "destino": destino,
+                "destino_nombre":
+                    datos_destino[
+                        "nombre"
+                    ],
+                "destino_pais_codigo":
+                    datos_destino[
+                        "pais_codigo"
+                    ],
                 "precio": precio_numero,
                 "moneda": moneda.upper(),
-                "salida": vuelo.get("departure_at"),
-                "regreso": vuelo.get("return_at"),
-                "aerolinea": vuelo.get("airline"),
+                "salida": vuelo.get(
+                    "departure_at"
+                ),
+                "regreso": vuelo.get(
+                    "return_at"
+                ),
+                "aerolinea": vuelo.get(
+                    "airline"
+                ),
                 "numero_vuelo": vuelo.get(
                     "flight_number"
                 ),
-                "duracion": vuelo.get("duration"),
+                "duracion": vuelo.get(
+                    "duration"
+                ),
                 "duracion_ida": vuelo.get(
                     "duration_to"
                 ),
                 "duracion_vuelta": vuelo.get(
                     "duration_back"
                 ),
-                "escalas_ida": escalas_ida,
-                "escalas_vuelta": escalas_vuelta,
-                "directo": es_directo,
-                "proveedor": vuelo.get("gate"),
+                "escalas_ida":
+                    escalas_ida,
+                "escalas_vuelta":
+                    escalas_vuelta,
+                "directo":
+                    es_directo,
+                "proveedor": vuelo.get(
+                    "gate"
+                ),
                 "link": generar_link_aviasales(
                     vuelo.get("link")
                 ),
@@ -259,7 +429,9 @@ def buscar_oportunidades_desde(
     oportunidades.sort(
         key=lambda oportunidad: (
             oportunidad["precio"],
-            0 if oportunidad["directo"] else 1,
+            0
+            if oportunidad["directo"]
+            else 1,
         )
     )
 
