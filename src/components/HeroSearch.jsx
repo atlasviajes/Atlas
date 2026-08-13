@@ -109,6 +109,22 @@ function HeroSearch() {
     return `${horas} h ${mins} min`;
   };
 
+  const obtenerEnlaceVuelo = (vuelo) => {
+    if (vuelo.affiliate_link) {
+      return vuelo.affiliate_link;
+    }
+
+    if (vuelo.link) {
+      if (vuelo.link.startsWith("http")) {
+        return vuelo.link;
+      }
+
+      return `https://www.aviasales.com${vuelo.link}`;
+    }
+
+    return "#";
+  };
+
   const buscarViaje = async () => {
     const codigoOrigen = obtenerCodigo(origenCodigo, origenTexto);
     const codigoDestino = obtenerCodigo(destinoCodigo, destinoTexto);
@@ -366,15 +382,14 @@ function HeroSearch() {
                 <div className="flight-card-bottom">
                   <span>Precio orientativo</span>
 
-<a
-  href={`https://www.aviasales.com${vuelo.link}${
-    vuelo.link.includes("?") ? "&" : "?"
-  }currency=EUR`}
-  target="_blank"
-  rel="noreferrer"
->
-  VER VUELO
-</a>                </div>
+                  <a
+                    href={obtenerEnlaceVuelo(vuelo)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    VER VUELO
+                  </a>
+                </div>
               </article>
             ))}
           </div>
