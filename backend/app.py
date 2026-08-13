@@ -20,8 +20,11 @@ TRAVELPAYOUTS_PARTNER_ID = os.getenv("TRAVELPAYOUTS_PARTNER_ID")
 
 
 # Importamos Travelpayouts DESPUÉS de cargar .env
-from backend.travelpayouts import buscar_oportunidades_desde
 
+try:
+    from backend.travelpayouts import buscar_oportunidades_desde
+except ModuleNotFoundError:
+    from travelpayouts import buscar_oportunidades_desde
 
 # =========================================================
 # FASTAPI
