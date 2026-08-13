@@ -19,15 +19,18 @@ TRAVELPAYOUTS_PROJECT_ID = os.getenv("TRAVELPAYOUTS_PROJECT_ID")
 TRAVELPAYOUTS_PARTNER_ID = os.getenv("TRAVELPAYOUTS_PARTNER_ID")
 
 
+# Importamos Travelpayouts DESPUÉS de cargar .env
+from backend.travelpayouts import buscar_oportunidades_desde
+
+
 # =========================================================
 # FASTAPI
 # =========================================================
 
 app = FastAPI(
     title="Atlas API",
-    version="0.1.0",
+    version="0.3.0",
 )
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,7 +55,7 @@ def inicio():
     return {
         "app": "Atlas API",
         "estado": "online",
-        "version": "0.1.0",
+        "version": "0.3.0",
     }
 
 
@@ -71,13 +74,15 @@ def salud():
 
 
 # =========================================================
-# FUNCIÓN INTERNA: BUSCAR VUELOS
+# FUNCIÓN INTERNA: BUSCAR VUELOS DE UNA RUTA
 # =========================================================
 
 async def obtener_vuelos(
     origen: str,
     destino: str,
     moneda: str = "EUR",
+    fecha_ida: str | None = None,
+    fecha_vuelta: str | None = None,
 ):
     if not TRAVELPAYOUTS_API_TOKEN:
         raise HTTPException(
@@ -98,6 +103,12 @@ async def obtener_vuelos(
         "one_way": "false",
         "token": TRAVELPAYOUTS_API_TOKEN,
     }
+
+    if fecha_ida:
+        params["departure_at"] = fecha_ida
+
+    if fecha_vuelta:
+        params["return_at"] = fecha_vuelta
 
     try:
         async with httpx.AsyncClient(timeout=20) as client:
@@ -126,6 +137,8 @@ async def obtener_vuelos(
     return {
         "origen": origen.strip().upper(),
         "destino": destino.strip().upper(),
+        "fecha_ida": fecha_ida,
+        "fecha_vuelta": fecha_vuelta,
         "fuente": "Travelpayouts / Aviasales Data API",
         "tiempo_real": False,
         "resultados": datos,
@@ -141,11 +154,15 @@ async def vuelos(
     origen: str = "OVD",
     destino: str = "TFS",
     moneda: str = "EUR",
+    fecha_ida: str | None = None,
+    fecha_vuelta: str | None = None,
 ):
     return await obtener_vuelos(
         origen=origen,
         destino=destino,
         moneda=moneda,
+        fecha_ida=fecha_ida,
+        fecha_vuelta=fecha_vuelta,
     )
 
 
@@ -154,12 +171,85 @@ async def vuelos_buscar(
     origen: str,
     destino: str,
     moneda: str = "EUR",
+    fecha_ida: str | None = None,
+    fecha_vuelta: str | None = None,
 ):
     return await obtener_vuelos(
         origen=origen,
         destino=destino,
         moneda=moneda,
+        fecha_ida=fecha_ida,
+        fecha_vuelta=fecha_vuelta,
     )
+
+
+# =========================================================
+# OPORTUNIDADES ATLAS
+# =========================================================
+
+@app.get("/oportunidades")
+def oportunidades(
+    origen: str = "OVD",
+    presupuesto: float | None = None,
+    moneda: str = "EUR",
+    limite: int = 30,
+    solo_directos: bool = False,
+):
+    """
+    Busca destinos baratos desde un origen.
+
+    Ejemplo:
+    /oportunidades?origen=OVD&presupuesto=600
+
+    Los resultados son oportunidades de precio
+    encontradas recientemente, no disponibilidad
+    en tiempo real.
+    """
+
+    if limite < 1:
+        limite = 1
+
+    if limite > 30:
+        limite = 30
+
+    if presupuesto is not None and presupuesto < 0:
+        raise HTTPException(
+            status_code=400,
+            detail="El presupuesto no puede ser negativo",
+        )
+
+    try:
+        resultados = buscar_oportunidades_desde(
+            origen=origen,
+            moneda=moneda,
+            presupuesto=presupuesto,
+            limite=limite,
+            solo_directos=solo_directos,
+        )
+
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=500,
+            detail=str(error),
+        )
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudieron obtener oportunidades: {error}",
+        )
+
+    return {
+        "ok": True,
+        "origen": origen.strip().upper(),
+        "presupuesto": presupuesto,
+        "moneda": moneda.strip().upper(),
+        "solo_directos": solo_directos,
+        "tiempo_real": False,
+        "fuente": "Travelpayouts / Aviasales Data API",
+        "total": len(resultados),
+        "oportunidades": resultados,
+    }
 
 
 # =========================================================
@@ -222,13 +312,11 @@ async def buscar_lugares(texto: str):
         if tipo not in ("city", "airport"):
             continue
 
-        # Solo códigos IATA válidos de 3 letras
         if len(codigo) != 3 or not codigo.isalpha():
             continue
 
         nombre_busqueda = nombre.casefold()
 
-        # Prioridad para coincidencia exacta o que comienza por el texto
         if nombre_busqueda == texto_busqueda:
             prioridad = 0
         elif nombre_busqueda.startswith(texto_busqueda):
@@ -266,6 +354,7 @@ async def buscar_lugares(texto: str):
         lugar.pop("_peso", None)
 
     return resultados
+
 
 # =========================================================
 # ENLACES AFILIADOS
