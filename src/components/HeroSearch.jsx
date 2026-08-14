@@ -211,6 +211,90 @@ function HeroSearch() {
     );
   };
 
+  const clasificarCoincidencia = (vuelo) => {
+    if (!fechaIda || !fechaVuelta) {
+      return {
+        nivel: 4,
+        tipo: "oportunidad",
+        etiqueta: "💡 OPORTUNIDAD ATLAS",
+        diferenciaMaxima: null,
+      };
+    }
+
+    const diasIda = diferenciaDias(
+      vuelo.departure_at,
+      fechaIda
+    );
+
+    const diasVuelta = diferenciaDias(
+      vuelo.return_at,
+      fechaVuelta
+    );
+
+    const diferenciaMaxima = Math.max(
+      diasIda,
+      diasVuelta
+    );
+
+    if (diferenciaMaxima === 0) {
+      return {
+        nivel: 0,
+        tipo: "exacta",
+        etiqueta: "🎯 COINCIDE CON TU BÚSQUEDA",
+        diferenciaMaxima,
+      };
+    }
+
+    if (diferenciaMaxima <= 2) {
+      return {
+        nivel: 1,
+        tipo: "muy_cercana",
+        etiqueta: `📅 FECHAS CERCANAS · ±${diferenciaMaxima} ${diferenciaMaxima === 1 ? "DÍA" : "DÍAS"}`,
+        diferenciaMaxima,
+      };
+    }
+
+    return {
+      nivel: 2,
+      tipo: "alternativa",
+      etiqueta: `💡 OTRAS FECHAS · ${diferenciaMaxima} ${diferenciaMaxima === 1 ? "DÍA" : "DÍAS"} DE DIFERENCIA`,
+      diferenciaMaxima,
+    };
+  };
+
+  const ordenarBusquedaPorCoincidencia = (lista) => {
+    return [...lista].sort((a, b) => {
+      const coincidenciaA = clasificarCoincidencia(a);
+      const coincidenciaB = clasificarCoincidencia(b);
+
+      if (coincidenciaA.nivel !== coincidenciaB.nivel) {
+        return coincidenciaA.nivel - coincidenciaB.nivel;
+      }
+
+      const scoreA = calcularAtlasScore(a);
+      const scoreB = calcularAtlasScore(b);
+
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA;
+      }
+
+      return Number(a.price) - Number(b.price);
+    });
+  };
+
+const formatearFechaCorta = (fechaISO) => {
+  if (!fechaISO) return "";
+
+  const fechaLimpia = String(fechaISO).slice(0, 10);
+  const [anio, mes, dia] = fechaLimpia.split("-");
+
+  if (!anio || !mes || !dia) {
+    return fechaISO;
+  }
+
+  return `${dia}/${mes}/${anio}`;
+};
+
 const formatearFecha = (fechaISO) => {
   if (!fechaISO) {
     return "-";
@@ -512,23 +596,78 @@ const formatearFecha = (fechaISO) => {
         aplicarPresupuesto(lista);
 
       lista =
-        ordenarPorAtlasScore(lista);
+        ordenarBusquedaPorCoincidencia(
+          lista
+        );
 
       setVuelos(lista);
 
-      if (lista.length > 0) {
+      if (lista.length === 0) {
         setMensaje(
-          `Atlas ha encontrado ${lista.length} ${
-            lista.length === 1
-              ? "oportunidad"
-              : "oportunidades"
-          } cercanas a tus fechas.`
+          `No hemos encontrado vuelos para ${destinoTexto} exactamente del ${formatearFechaCorta(fechaIda)} al ${formatearFechaCorta(fechaVuelta)} dentro de tu presupuesto. Prueba OFERTAS AHORA para descubrir otras opciones.`
         );
-      } else {
-        setMensaje(
-          "No hemos encontrado oportunidades recientes suficientemente cercanas a esas fechas. Prueba OFERTAS AHORA para descubrir otros destinos."
-        );
+        return;
       }
+
+      const exactas =
+        lista.filter(
+          (vuelo) =>
+            clasificarCoincidencia(
+              vuelo
+            ).tipo === "exacta"
+        ).length;
+
+      const cercanas =
+        lista.filter(
+          (vuelo) =>
+            clasificarCoincidencia(
+              vuelo
+            ).tipo === "muy_cercana"
+        ).length;
+
+      const alternativas =
+        lista.filter(
+          (vuelo) =>
+            clasificarCoincidencia(
+              vuelo
+            ).tipo === "alternativa"
+        ).length;
+
+      let texto = "";
+
+      if (exactas > 0) {
+        texto +=
+          `🎯 Hemos encontrado ${exactas} ${
+            exactas === 1
+              ? "opción que coincide"
+              : "opciones que coinciden"
+          } con tu destino, fechas y presupuesto. `;
+      } else {
+        texto +=
+          `No hemos encontrado vuelos para ${destinoTexto} exactamente del ${formatearFechaCorta(fechaIda)} al ${formatearFechaCorta(fechaVuelta)} dentro de tu presupuesto. `;
+      }
+
+      if (cercanas > 0) {
+        texto +=
+          `📅 Atlas ha encontrado ${cercanas} ${
+            cercanas === 1
+              ? "alternativa cercana"
+              : "alternativas cercanas"
+          } a un máximo de ±2 días. `;
+      }
+
+      if (alternativas > 0) {
+        texto +=
+          `💡 Además, ${
+            alternativas === 1
+              ? "hay 1 oportunidad para el mismo destino en otras fechas."
+              : `hay ${alternativas} oportunidades para el mismo destino en otras fechas.`
+          }`;
+      }
+
+      setMensaje(
+        texto.trim()
+      );
     } catch (error) {
       console.error(error);
 
@@ -1081,7 +1220,7 @@ const formatearFecha = (fechaISO) => {
               <h2>
                 {modoResultados ===
                 "fechas"
-                  ? "🔎 Viajes para tu búsqueda"
+                  ? "🔎 Resultados para tu búsqueda"
                   : "⚡ Mejores oportunidades Atlas"}
               </h2>
 
@@ -1149,11 +1288,47 @@ const formatearFecha = (fechaISO) => {
                     vuelo
                   );
 
+                const coincidencia =
+                  modoResultados === "fechas"
+                    ? clasificarCoincidencia(vuelo)
+                    : null;
+
                 return (
                   <article
                     className="flight-card"
                     key={`${vuelo.destination_airport}-${vuelo.departure_at}-${index}`}
                   >
+                    {coincidencia && (
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          marginBottom: "14px",
+                          padding: "7px 11px",
+                          borderRadius: "9px",
+                          background:
+                            coincidencia.tipo === "exacta"
+                              ? "#eaf8ef"
+                              : coincidencia.tipo === "muy_cercana"
+                              ? "#eef6ff"
+                              : coincidencia.tipo === "flexible"
+                              ? "#fff8e6"
+                              : "#f8fafc",
+                          color:
+                            coincidencia.tipo === "exacta"
+                              ? "#166534"
+                              : coincidencia.tipo === "muy_cercana"
+                              ? "#0f54c7"
+                              : coincidencia.tipo === "flexible"
+                              ? "#8a5600"
+                              : "#475569",
+                          fontSize: "11px",
+                          fontWeight: "800",
+                        }}
+                      >
+                        {coincidencia.etiqueta}
+                      </div>
+                    )}
 
                     <div className="flight-card-top">
 
